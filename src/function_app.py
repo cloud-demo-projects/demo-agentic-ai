@@ -1,9 +1,71 @@
 import azure.functions as func
 import json, os, base64, logging
 from shared.agentic_health import generate_meal_plan
+import base64
+import json
+import logging
+import os
+from threading import Lock
+from typing import Optional, Tuple
 from openai import OpenAI
+from shared.agentic_health import generate_meal_plan
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+
+MAX_JSON_BYTES = int(os.getenv("MAX_JSON_BYTES", 16 * 1024))
+MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", 4 * 1024 * 1024))
+
+_IMAGE_CLIENT_LOCK = Lock()
+_IMAGE_CLIENT: Optional[OpenAI] = None
+_IMAGE_CLIENT_SIGNATURE: Optional[Tuple[str, str, str, str, str]] = None
+_IMAGE_MODEL: Optional[str] = None
+
+
+def _current_image_signature() -> Tuple[str, str, str, str, str]:
+    """Build a signature that reflects the active credentials/configuration."""
+
+    return (
+        os.getenv("AZURE_OPENAI_API_KEY", ""),
+        os.getenv("AZURE_OPENAI_ENDPOINT", ""),
+        os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
+        os.getenv("OPENAI_API_KEY", ""),
+        os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+    )
+
+
+def _resolve_image_client() -> Tuple[OpenAI, str]:
+    """Return a cached OpenAI client plus the model to use for vision calls."""
+
+    global _IMAGE_CLIENT, _IMAGE_MODEL, _IMAGE_CLIENT_SIGNATURE
+
+    signature = _current_image_signature()
+
+    with _IMAGE_CLIENT_LOCK:
+        if _IMAGE_CLIENT and _IMAGE_CLIENT_SIGNATURE == signature and _IMAGE_MODEL:
+            return _IMAGE_CLIENT, _IMAGE_MODEL
+
+        azure_key, azure_endpoint, azure_deployment, openai_key, openai_model = signature
+
+        if azure_key and azure_endpoint:
+            logging.info("Using Azure OpenAI vision deployment %s", azure_deployment)
+            client = OpenAI(
+                api_key=azure_key,
+                base_url=azure_endpoint,
+                default_headers={"api-version": "2024-05-01-preview"},
+            )
+            model = azure_deployment
+        elif openai_key:
+            logging.info("Using OpenAI vision model %s", openai_model)
+            client = OpenAI(api_key=openai_key)
+            model = openai_model or "gpt-4o-mini"
+        else:
+            raise RuntimeError("No OpenAI credentials configured for image analysis")
+
+        _IMAGE_CLIENT = client
+        _IMAGE_MODEL = model
+        _IMAGE_CLIENT_SIGNATURE = signature
+
+        return client, model
 
 
 # --- Text-based meal plan endpoint ---
@@ -12,6 +74,24 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 def generate_meal_plan_fn(req: func.HttpRequest) -> func.HttpResponse:
     try:
         body = req.get_json()
+        raw_body = req.get_body() or b"{}"
+        if len(raw_body) > MAX_JSON_BYTES:
+            logging.warning("Rejected request body over %s bytes", MAX_JSON_BYTES)
+            return func.HttpResponse(
+                json.dumps({"error": "Request body too large"}),
+                status_code=413,
+                mimetype="application/json",
+            )
+
+        try:
+            body = json.loads(raw_body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return func.HttpResponse(
+                json.dumps({"error": "Invalid JSON payload"}),
+                status_code=400,
+                mimetype="application/json",
+            )
+
         goal = body.get("goal", "anti-inflammatory meal plan for prediabetes")
         result = generate_meal_plan(goal)
         return func.HttpResponse(json.dumps(result), mimetype="application/json", status_code=200)
@@ -30,6 +110,21 @@ def analyze_photo(req: func.HttpRequest) -> func.HttpResponse:
             return func.HttpResponse("No file uploaded", status_code=400)
 
         img_bytes = base64.b64encode(file.stream.read()).decode()
+        declared_size = getattr(file, "content_length", None)
+        if declared_size and declared_size > MAX_IMAGE_BYTES:
+            logging.warning("Rejected upload over %s bytes (declared)", MAX_IMAGE_BYTES)
+            return func.HttpResponse("File too large", status_code=413)
+
+        image_bytes = file.stream.read(MAX_IMAGE_BYTES + 1)
+        if len(image_bytes) > MAX_IMAGE_BYTES:
+            logging.warning("Rejected upload over %s bytes (actual)", MAX_IMAGE_BYTES)
+            return func.HttpResponse("File too large", status_code=413)
+
+        mimetype = getattr(file, "mimetype", "") or ""
+        if mimetype and not mimetype.startswith("image/"):
+            return func.HttpResponse("Unsupported file type", status_code=415)
+
+        img_bytes = base64.b64encode(image_bytes).decode()
         prompt = "Analyze this meal photo for glycemic impact and inflammation potential."
 
         # Try Azure OpenAI first
@@ -41,6 +136,7 @@ def analyze_photo(req: func.HttpRequest) -> func.HttpResponse:
             )
         else:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client, model = _resolve_image_client()
 
         response = client.chat.completions.create(
             model=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
