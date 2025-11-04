@@ -1,6 +1,6 @@
 # demo-agentic-ai
 
-Local Installation Steps
+## Local Installation Steps
 1️⃣ Install or Update Ollama (on your local dev machine)
 For Linux/Mac:
 curl -fsSL https://ollama.com/install.sh | sh
@@ -10,7 +10,7 @@ Download from https://ollama.com/download
 Run installer and restart your terminal.
 Confirm it’s working:
 ollama --version
-# should show >= 0.1.46
+should show >= 0.1.46
 
 2️⃣ Pull a Supported Model
 For example:
