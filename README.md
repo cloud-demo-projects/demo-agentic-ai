@@ -2,7 +2,7 @@
 
 - Azure Python FunctionApp -> API
 - LangChain -> Agent
-- LLM -> LLAMA
+- LLM -> Ollama
 - Search Engine -> Duckduckgo
 
 ## Local Installation Steps
