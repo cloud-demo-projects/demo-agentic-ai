@@ -5,6 +5,7 @@
 - LLM -> Ollama
 - Search Engine -> Duckduckgo
 
+
 ## Local Installation Steps
 1️⃣ Install or Update Ollama (on your local dev machine)
 For Linux/Mac:
