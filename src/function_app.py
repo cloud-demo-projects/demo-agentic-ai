@@ -69,19 +69,40 @@ def _resolve_image_client() -> Tuple[OpenAI, str]:
         return client, model
 
 
+def _get_cors_headers():
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+    return {
+        "Access-Control-Allow-Origin": allowed_origins,
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Max-Age": "86400",
+    }
+
+
+def _cors_response(body="", status_code=200, mimetype="application/json"):
+    return func.HttpResponse(
+        body=body,
+        status_code=status_code, 
+        mimetype=mimetype,
+        headers=_get_cors_headers()
+    )
+
+
 # --- Text-based meal plan endpoint ---
 @app.function_name(name="generate_meal_plan")
-@app.route(route="generate_meal_plan", methods=["POST"])
+@app.route(route="generate_meal_plan", methods=["POST", "OPTIONS"])
 def generate_meal_plan_fn(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_response(status_code=204)
+        
     try:
         body = req.get_json()
         raw_body = req.get_body() or b"{}"
         if len(raw_body) > MAX_JSON_BYTES:
             logging.warning("Rejected request body over %s bytes", MAX_JSON_BYTES)
-            return func.HttpResponse(
+            return _cors_response(
                 json.dumps({"error": "Request body too large"}),
-                status_code=413,
-                mimetype="application/json",
+                status_code=413
             )
 
         try:
@@ -96,20 +117,26 @@ def generate_meal_plan_fn(req: func.HttpRequest) -> func.HttpResponse:
         goal = body.get("goal")
         purpose = body.get("purpose")
         result = generate_meal_plan(goal, purpose)
-        return func.HttpResponse(json.dumps(result), mimetype="application/json", status_code=200)
+        return _cors_response(json.dumps(result))
     except Exception as e:
         logging.error(str(e))
-        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500)
+        return _cors_response(json.dumps({"error": str(e)}), status_code=500)
 
 
 # --- Image upload + analysis endpoint ---
-@app.function_name(name="analyze_photo")
-@app.route(route="analyze_photo", methods=["POST"])
+@app.function_name(name="analyze_photo") 
+@app.route(route="analyze_photo", methods=["POST", "OPTIONS"])
 def analyze_photo(req: func.HttpRequest) -> func.HttpResponse:
+    if req.method == "OPTIONS":
+        return _cors_response(status_code=204)
+
     try:
         file = req.files.get("file")
         if not file:
-            return func.HttpResponse("No file uploaded", status_code=400)
+            return _cors_response(
+                json.dumps({"error": "No file uploaded"}), 
+                status_code=400
+            )
 
         img_bytes = base64.b64encode(file.stream.read()).decode()
         declared_size = getattr(file, "content_length", None)
@@ -152,16 +179,13 @@ def analyze_photo(req: func.HttpRequest) -> func.HttpResponse:
         )
 
         result = {"analysis": response.choices[0].message.content}
-        return func.HttpResponse(json.dumps(result), mimetype="application/json", status_code=200)
-
+        return _cors_response(json.dumps(result))
     except Exception as e:
         logging.error(f"Image analysis failed: {e}")
-        # Graceful fallback response
-        return func.HttpResponse(
+        return _cors_response(
             json.dumps({
                 "error": "Analysis failed. Check API quota or try offline mode.",
                 "details": str(e)
             }),
-            status_code=500,
-            mimetype="application/json"
+            status_code=500
         )
