@@ -80,7 +80,7 @@ def get_llm():
     return _build_llm(_current_model_signature())
 
 
-def generate_meal_plan(goal: str):
+def generate_meal_plan(goal: str, purpose: str):
     """Generate an anti-inflammatory, low-glycemic meal plan."""
     llm = get_llm()
     search = DuckDuckGoSearchRun()
@@ -103,21 +103,21 @@ def generate_meal_plan(goal: str):
     )
     signature = _current_model_signature()
     agent, llm = _get_agent(signature)
-    prompt = f"Create an anti-inflammatory, low-glycemic meal plan for: {goal}"
+    prompt = f"{purpose}: {goal}"
 
     try:
-        result = agent.run(f"Create an anti-inflammatory, low-glycemic meal plan for: {goal}")
+        result = agent.run(f"{purpose}: {goal}")
         if agent:
             result = agent.run(prompt)
         else:
             result = llm.predict(prompt)
-        return {"goal": goal, "meal_plan": result, "model": type(llm).__name__}
+        return {"goal": goal, "purpose": purpose, "meal_plan": result, "model": type(llm).__name__}
     except Exception as e:
         logging.error(f"Agent execution failed: {e}")
-        return {"goal": goal, "error": str(e), "model": type(llm).__name__}
+        return {"goal": goal, "purpose": purpose, "error": str(e), "model": type(llm).__name__}
     except Exception as exc:
         logging.error("Agent execution failed: %s", exc)
-        return {"goal": goal, "error": str(exc), "model": type(llm).__name__}
+        return {"goal": goal, "purpose": purpose, "error": str(exc), "model": type(llm).__name__}
 
 
 @lru_cache(maxsize=1)

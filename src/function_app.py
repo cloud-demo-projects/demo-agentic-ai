@@ -12,6 +12,7 @@ from shared.agentic_health import generate_meal_plan
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
+
 MAX_JSON_BYTES = int(os.getenv("MAX_JSON_BYTES", 16 * 1024))
 MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", 4 * 1024 * 1024))
 
@@ -92,8 +93,9 @@ def generate_meal_plan_fn(req: func.HttpRequest) -> func.HttpResponse:
                 mimetype="application/json",
             )
 
-        goal = body.get("goal", "anti-inflammatory meal plan for prediabetes")
-        result = generate_meal_plan(goal)
+        goal = body.get("goal")
+        purpose = body.get("purpose")
+        result = generate_meal_plan(goal, purpose)
         return func.HttpResponse(json.dumps(result), mimetype="application/json", status_code=200)
     except Exception as e:
         logging.error(str(e))
