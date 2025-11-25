@@ -4,6 +4,8 @@
 - LLM -> Ollama
 - Search Engine -> Duckduckgo
 
+<img width="3964" height="1648" alt="image" src="https://github.com/user-attachments/assets/c9a8be08-0f8a-4182-85db-b75728449e72" />
+
 ## Local Installation Steps
 1️⃣ Install or Update Ollama (on your local dev machine)
 For Linux/Mac:
