@@ -30,7 +30,7 @@ def _current_model_signature() -> Tuple[str, str, str, str, str, str]:
         os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
         os.getenv("OPENAI_API_KEY", ""),
         os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        os.getenv("OLLAMA_MODEL", "llama3"),
+        os.getenv("OLLAMA_MODEL", "llama3.2:1b"),
     )
 
 
@@ -71,7 +71,7 @@ def _build_llm(signature: Tuple[str, str, str, str, str, str]):
     except Exception as e:
         logging.error(f"Model selection failed: {e}")
         # Final fallback to local Ollama
-        return ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3"))
+        return ChatOllama(model=os.getenv("OLLAMA_MODEL", "llama3.2:1b"))
 
 
 def get_llm():
@@ -99,7 +99,8 @@ def generate_meal_plan(goal: str, purpose: str):
         tools, llm,
         agent_type="conversational-react-description",
         memory=memory,
-        verbose=False
+        verbose=False,
+        handle_parsing_errors=True
     )
     signature = _current_model_signature()
     agent, llm = _get_agent(signature)

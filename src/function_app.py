@@ -94,7 +94,7 @@ def _cors_response(body="", status_code=200, mimetype="application/json"):
 def generate_meal_plan_fn(req: func.HttpRequest) -> func.HttpResponse:
     if req.method == "OPTIONS":
         return _cors_response(status_code=204)
-        
+
     try:
         body = req.get_json()
         raw_body = req.get_body() or b"{}"
