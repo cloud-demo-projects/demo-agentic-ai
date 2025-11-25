@@ -48,6 +48,3 @@ print(response)
 
 ✅ Expected: A natural-language answer directly from your local model
 
-## React Frontend
-- npx create-react-app health-frontend
-<img width="342" height="412" alt="image" src="https://github.com/user-attachments/assets/0b83177c-7f4a-4c30-bfc8-90c3639f22b8" />
