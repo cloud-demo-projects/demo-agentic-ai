@@ -1,10 +1,8 @@
-# demo-agentic-ai
-
+# Layers
 - Azure Python FunctionApp -> API
 - LangChain -> Agent
 - LLM -> Ollama
 - Search Engine -> Duckduckgo
-
 
 ## Local Installation Steps
 1️⃣ Install or Update Ollama (on your local dev machine)
@@ -40,11 +38,8 @@ You do not need any separate ollama Python package — LangChain directly integr
 
 5️⃣ Example Test Script
 from langchain_community.chat_models import ChatOllama
-
 llm = ChatOllama(model="llama3", temperature=0.4)
-
 response = llm.invoke("Explain how flaxseeds help reduce inflammation.")
 print(response)
-
 ✅ Expected: A natural-language answer directly from your local model
 
