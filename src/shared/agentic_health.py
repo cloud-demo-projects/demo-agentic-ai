@@ -8,9 +8,7 @@ from langchain_community.chat_models import (
     ChatOllama
 )
 import os
-from functools import lru_cache
 from typing import List, Tuple
-
 from langchain.agents import AgentType, Tool, initialize_agent
 from langchain_community.chat_models import AzureChatOpenAI, ChatOllama, ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchRun
@@ -84,7 +82,9 @@ def _build_llm(signature: Tuple[str, str, str, str, str, str]):
         logging.error("Model selection failed: %s", exc)
         return ChatOllama(model=ollama_model)
 
-
+# -------------------------------------------------------------------
+# LLM
+# -------------------------------------------------------------------
 def get_llm():
     """
     Public helper for callers that only need an LLM instance.
@@ -92,6 +92,7 @@ def get_llm():
     """
     signature = _current_model_signature()
     return _build_llm(signature)
+
 
 # -------------------------------------------------------------------
 # Tools
@@ -113,6 +114,9 @@ def build_tools() -> List[Tool]:
     return tools
 
 
+# -------------------------------------------------------------------
+# Agent
+# -------------------------------------------------------------------
 def _get_agent(tools: List[Tool], llm, memory) :
     """Construct and cache the agent pipeline keyed by configuration inputs."""
 
@@ -120,11 +124,11 @@ def _get_agent(tools: List[Tool], llm, memory) :
         agent = initialize_agent(
         tools=tools,
         llm=llm,
-        agent_type=AgentType.STRUCTURED_CHAT_ZERO_SHOT_REACT_DESCRIPTION,
+        agent_type=AgentType.SELF_ASK_WITH_SEARCH,
         verbose=True,
         memory=memory,
         handle_parsing_errors=True,
-        max_iterations=40,
+        max_iterations=3,
         max_execution_time=60
     )
     else:
