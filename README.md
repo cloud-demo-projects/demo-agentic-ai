@@ -4,9 +4,12 @@
 - LLM -> Ollama
 - Search Engine -> Duckduckgo
 
+# Visualization 1
 <img width="3964" height="1648" alt="image" src="https://github.com/user-attachments/assets/c9a8be08-0f8a-4182-85db-b75728449e72" />
 
+# Visualization 2
 <img width="3964" height="1648" alt="image" src="https://learn.microsoft.com/en-us/agent-framework/media/agent.svg" />
+
 
 ## Local Ollama Installation Steps
 1️⃣ Install or Update Ollama (on your local dev machine)
