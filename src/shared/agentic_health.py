@@ -1,14 +1,7 @@
 import os
-"""LangChain helpers for generating nutrition-focused plans."""
-
 import logging
-from langchain_community.chat_models import (
-    AzureChatOpenAI,
-    ChatOpenAI,
-    ChatOllama
-)
-import os
 from typing import List, Tuple
+from langchain_community.chat_models import AzureChatOpenAI,ChatOpenAI,ChatOllama
 from langchain.agents import AgentType, Tool, initialize_agent
 from langchain_community.chat_models import AzureChatOpenAI, ChatOllama, ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchRun
@@ -19,7 +12,6 @@ from langchain.memory import ConversationBufferMemory
 # -------------------------------------------------------------------
 # Feature flags / environment
 # -------------------------------------------------------------------
-
 ENABLE_WEB_SEARCH = os.getenv("ENABLE_WEB_SEARCH", "true").lower() not in {
     "0",
     "false",
@@ -30,7 +22,6 @@ ENABLE_WEB_SEARCH = os.getenv("ENABLE_WEB_SEARCH", "true").lower() not in {
 # -------------------------------------------------------------------
 # LLM selection
 # -------------------------------------------------------------------
-
 def _current_model_signature() -> Tuple[str, str, str, str, str, str]:
     """Capture relevant configuration inputs so caches react to env changes."""
 
@@ -152,7 +143,7 @@ def _get_agent(tools: List[Tool], llm, memory):
 
 
 def generate_meal_plan(goal: str, purpose: str):
-    """Generate an anti-inflammatory, low-glycemic meal plan."""
+    """Generate meal plan as per asked, using agent with tools and memory."""
 
     # 1. Build LLM
     llm = get_llm()
@@ -173,7 +164,7 @@ def generate_meal_plan(goal: str, purpose: str):
         "You are a nutrition coach. Create a concise, actionable "
         "anti-inflammatory, low-glycemic meal plan. "
         "If needed, use the Web Search tool for evidence. "
-        "Return the final plan under 'Final Answer:' as bullet points.\n\n"
+        "Return the final plan under 'Final Answer:' as simple readable string.\n\n"
         f"Goal: {goal}\nPurpose: {purpose}"
     )
 
