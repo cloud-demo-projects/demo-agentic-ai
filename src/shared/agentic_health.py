@@ -37,9 +37,9 @@ def _current_model_signature() -> Tuple[str, str, str, str, str, str]:
     return (
         os.getenv("AZURE_OPENAI_API_KEY", ""),
         os.getenv("AZURE_OPENAI_ENDPOINT", ""),
-        os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
+        os.getenv("AZURE_OPENAI_DEPLOYMENT", ""),
         os.getenv("OPENAI_API_KEY", ""),
-        os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        os.getenv("OPENAI_MODEL", ""),
         os.getenv("OLLAMA_MODEL", "llama3.2:1b"),
     )
 
@@ -52,17 +52,28 @@ def _build_llm(signature: Tuple[str, str, str, str, str, str]):
     try:
         # Prefer Azure
         if os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT"):
-            logging.info("Using Azure OpenAI...")
-
-        if azure_key and azure_endpoint:
+            azure_deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "").strip()
+            azure_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
+            api_version = os.getenv("AZURE_OPENAI_API_VERSION", "").strip()
+            azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip()
             logging.info("Using Azure OpenAI chat deployment %s", azure_deployment)
-            return AzureChatOpenAI(
-                azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o-mini"),
-                azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-                api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-                api_version="2024-05-01-preview",
-                temperature=0.4
-            )
+
+            if not (azure_deployment and azure_endpoint and azure_key and api_version):
+                missing = [n for n,v in {
+                    "AZURE_OPENAI_DEPLOYMENT": azure_deployment,
+                    "AZURE_OPENAI_ENDPOINT": azure_endpoint,
+                    "AZURE_OPENAI_API_KEY": azure_key,
+                    "AZURE_OPENAI_API_VERSION": api_version
+                }.items() if not v]
+                logging.warning("Azure OpenAI env incomplete (%s); falling back.", ", ".join(missing))
+            else:
+                return AzureChatOpenAI(
+                    azure_deployment=azure_deployment,
+                    azure_endpoint=azure_endpoint,
+                    api_key=azure_key,
+                    api_version=api_version,
+                    temperature=0.4
+                )
 
         # Fallback to OpenAI
         elif os.getenv("OPENAI_API_KEY"):
@@ -70,7 +81,7 @@ def _build_llm(signature: Tuple[str, str, str, str, str, str]):
         if openai_key:
             logging.info("Using OpenAI chat model %s", openai_model)
             return ChatOpenAI(
-                model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+                model=os.getenv("OPENAI_MODEL", ""),
                 temperature=0.4
             )
 
@@ -117,24 +128,27 @@ def build_tools() -> List[Tool]:
 # -------------------------------------------------------------------
 # Agent
 # -------------------------------------------------------------------
-def _get_agent(tools: List[Tool], llm, memory) :
-    """Construct and cache the agent pipeline keyed by configuration inputs."""
+def _get_agent(tools: List[Tool], llm, memory):
+    """Construct an agent that works reliably with memory and tools."""
 
-    if tools:
-        agent = initialize_agent(
-        tools=tools,
-        llm=llm,
-        agent_type=AgentType.SELF_ASK_WITH_SEARCH,
-        verbose=True,
-        memory=memory,
-        handle_parsing_errors=True,
-        max_iterations=3,
-        max_execution_time=60
-    )
-    else:
-        agent = None
+    if not tools:
+        return None
 
-    return agent
+    try:
+        return initialize_agent(
+            tools=tools,
+            llm=llm,
+            agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+            verbose=True,
+            memory=memory,
+            handle_parsing_errors="Check your output and try again.",
+            max_iterations=3,
+            max_execution_time=60,
+            early_stopping_method="generate",
+        )
+    except Exception as exc:
+        logging.exception("Agent initialization failed: %s", exc)
+        return None
 
 
 def generate_meal_plan(goal: str, purpose: str):
@@ -154,26 +168,55 @@ def generate_meal_plan(goal: str, purpose: str):
     if agent is None:
         raise ValueError("No tools available for the agent to use.")
 
-    # 5. Create Agent Prompt
-    prompt = f"{purpose}: {goal}"
+    # 5. Create Agent Prompt with clear output target
+    prompt = (
+        "You are a nutrition coach. Create a concise, actionable "
+        "anti-inflammatory, low-glycemic meal plan. "
+        "If needed, use the Web Search tool for evidence. "
+        "Return the final plan under 'Final Answer:' as bullet points.\n\n"
+        f"Goal: {goal}\nPurpose: {purpose}"
+    )
 
     try:
-        # 6. Run agent to collect the LLM output via tools
-        result = agent.run(prompt)
-        # [Alternative] Sending direct LLM results due to agents issues
-        # result = llm.predict(f"{purpose}: {goal}")
+        # 6. Run agent using invoke for LangChain 0.2
+        if agent is not None:
+            agent_result = agent.invoke({"input": prompt})
+            output_text = (
+                agent_result["output"]
+                if isinstance(agent_result, dict) and "output" in agent_result
+                else agent_result
+            )
+            return {
+                "goal": goal,
+                "purpose": purpose,
+                "meal_plan": output_text,
+                "model": type(llm).__name__
+            }
+
+        # Fallback: direct LLM without tools
+        logging.warning("Agent unavailable; falling back to direct LLM predict.")
+        direct = llm.predict(prompt)
         return {
             "goal": goal,
             "purpose": purpose,
-            "meal_plan": result,
+            "meal_plan": direct,
             "model": type(llm).__name__
         }
 
     except Exception as exc:
-        logging.exception("Agent execution failed")
-        return {
-            "goal": goal,
-            "purpose": purpose,
-            "error": str(exc),
-            "model": type(llm).__name__
-        }
+        logging.exception("Agent execution failed; falling back to direct LLM.")
+        try:
+            direct = llm.predict(prompt)
+            return {
+                "goal": goal,
+                "purpose": purpose,
+                "meal_plan": direct,
+                "model": type(llm).__name__
+            }
+        except Exception as exc2:
+            return {
+                "goal": goal,
+                "purpose": purpose,
+                "error": f"Agent error: {exc}; LLM fallback error: {exc2}",
+                "model": type(llm).__name__
+            }
