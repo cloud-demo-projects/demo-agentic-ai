@@ -1,13 +1,13 @@
-# Layers
-- Azure Python FunctionApp -> API
-- LangChain -> Agent
-- LLM -> Ollama
-- Search Engine -> Duckduckgo
+## Layers
+- API -> Azure Python FunctionApp
+- Agent -> LangChain
+- LLM -> Ollama: llama3.2:1b ; Azure Open AI: GPT-4.1
+- Tools -> Search Engine: Duckduckgo
 
-# Visualization 1
+## Visualization 1
 <img width="3964" height="1648" alt="image" src="https://github.com/user-attachments/assets/c9a8be08-0f8a-4182-85db-b75728449e72" />
 
-# Visualization 2
+## Visualization 2
 <img width="3964" height="1648" alt="image" src="https://learn.microsoft.com/en-us/agent-framework/media/agent.svg" />
 
 
